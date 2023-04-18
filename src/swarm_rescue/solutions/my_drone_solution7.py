@@ -5,6 +5,7 @@ The Drone will move forward and turn for a random angle when an obstacle is hit
 import math
 import random
 import numpy as np
+import pygame
 
 from enum import Enum
 from typing import Optional
@@ -18,7 +19,12 @@ from spg_overlay.entities.drone_abstract import DroneAbstract
 from spg_overlay.gui_map.closed_playground import ClosedPlayground
 from spg_overlay.utils.misc_data import MiscData
 from spg_overlay.utils.utils import normalize_angle
+from solutions.slam.features import featuresDetection as featureMAP
+from solutions.slam.env import buildEnvironment
 
+def random_color():
+    levels = range(32, 256, 32)
+    return tuple(random.choice(levels) for _ in range(3))
 
 class Graph(object):
 
@@ -39,8 +45,6 @@ class Graph(object):
                 self.__graph_dict[x].append(y)
             else:
                 self.__graph_dict[x] = [y]
-
-
 class Vertex(object):
     def __init__(self, position, angle=0, type=1):
         """
@@ -75,7 +79,7 @@ class Vertex(object):
         type = "Rescue Center" if self.__type == 0 else "Node"
         return f'{type}: {self.__angle}, {self.__position}'
 
-class MyDroneSolution6(DroneAbstract):
+class MyDroneSolution7(DroneAbstract):
 
     class Direction(Enum):
         NORTH = 0
@@ -118,6 +122,10 @@ class MyDroneSolution6(DroneAbstract):
         self.lastPathPosition = None
         self.firstDetectedWounded = False
         self.graph = Graph()
+        self.featureMAP = featureMAP()
+        self.environment = buildEnvironment((300,300))
+        self.environment.map.fill((255,255,255))
+
 
     def define_message_for_all(self):
         """
@@ -306,6 +314,44 @@ class MyDroneSolution6(DroneAbstract):
 
         return found_wounded, command
 
+    def process_lidar_sensor(self, the_lidar_sensor):
+        values = self.lidar().get_sensor_values()
+        ray_angles = self.lidar().ray_angles
+        size = self.lidar().resolution
+        robot_pos = self.measured_gps_position()
+        BREAK_POINT_IND = 0
+        PREDICTED_POINTS_TODRAW = []
+        FEATURES_DETECTION = True
+        ENDPOINTS = [0, 0]
+        self.featureMAP.laser_points_set(values, ray_angles, robot_pos)
+        while BREAK_POINT_IND< (self.featureMAP.NP - self.featureMAP.PMIN):
+            seedSeg = self.featureMAP.seed_segment_detection(robot_pos, BREAK_POINT_IND)
+            if not seedSeg:
+                break
+            else:
+                seedSegment = seedSeg[0]
+                PREDICTED_POINTS_TODRAW = seedSeg[1]
+                INDICES = seedSeg[2]
+                results = self.featureMAP.seed_segment_growing(INDICES, BREAK_POINT_IND)
+                if results == False:
+                    BREAK_POINT_IND = INDICES[1]
+                    continue
+                else:
+                    line_eq = results[1]
+                    m, c = results[5]
+                    line_seq = results[0]
+                    OUTERMOST = results[2]
+                    BREAK_POINT_IND = results[3]
+
+                    ENDPOINTS[0] = self.featureMAP.projection_point2line(OUTERMOST[0], m, c)
+                    ENDPOINTS[1] = self.featureMAP.projection_point2line(OUTERMOST[1], m, c)
+                COLOR = random_color()
+                for point in line_seq:
+                    self.environment.infomap.set_at((int(point[0][0]), int(point[0][1])), (0, 255, 0))
+                    pygame.draw.circle(self.environment.infomap, COLOR, (int(point[0][0]), int(point[0][1])), 2, 0)
+                pygame.draw.line(self.environment.infomap, (255, 0, 0), ENDPOINTS[0], ENDPOINTS[1], 2)
+                self.environment.dataStorage(values, ray_angles, robot_pos)
+
     def control(self):
         """
         The Drone will move forward and turn for a random angle when an obstacle is hit
@@ -393,6 +439,7 @@ class MyDroneSolution6(DroneAbstract):
         values = self.lidar().get_sensor_values()
         ray_angles = self.lidar().ray_angles
         size = self.lidar().resolution
+        self.process_lidar_sensor(self.lidar())
 
         min_dist = 1000
         if size != 0:

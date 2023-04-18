@@ -14,7 +14,7 @@ from maps.map_final import MyMapFinal
 
 from solutions.my_drone_random import MyDroneRandom
 from solutions.my_drone_victor import MyDrone as MyDroneV
-from solutions.my_drone_2 import MyDrone2
+from solutions.my_drone_solution7 import MyDroneSolution7
 from solutions.my_drone_solution6 import MyDroneSolution6
 from solutions.my_drone_victor import GridMap
 from typing import Optional
@@ -26,7 +26,7 @@ from spg_overlay.utils.misc_data import MiscData
 class MyMap(MyMapFinal):
     pass
 
-class MyDrone(MyDroneSolution6):
+class MyDrone(MyDroneSolution7):
     pass
 # class MyDrone(MyDroneV):
 #     def __init__(self, identifier: Optional[int] = None, misc_data: Optional[MiscData] = None, **kwargs):
